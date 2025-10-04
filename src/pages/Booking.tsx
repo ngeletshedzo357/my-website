@@ -10,7 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { CircleAlert as AlertCircle, CircleCheck as CheckCircle2, X, Loader2 } from "lucide-react";
+import { CircleAlert as AlertCircle, CircleCheck as CheckCircle2, X, Loader as Loader2 } from "lucide-react";
 import { fetchActiveServices, getServiceByName, groupServicesByCategory } from "@/lib/services";
 import { createBooking, MINIMUM_BOOKING_AMOUNT, calculateTravelFee, FREE_TRAVEL_RADIUS_KM, isValidBookingDate, isWithinBusinessHours, getBusinessHours } from "@/lib/bookings";
 import type { Service } from "@/lib/supabase";

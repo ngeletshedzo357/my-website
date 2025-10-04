@@ -5,7 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { LogOut, Calendar, MessageSquare, Star, Gift, Users, TrendingUp, Loader2 } from 'lucide-react';
+import { LogOut, Calendar, MessageSquare, Star, Gift, Users, TrendingUp, Loader as Loader2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import type { Booking, Contact, Testimonial } from '@/lib/supabase';
