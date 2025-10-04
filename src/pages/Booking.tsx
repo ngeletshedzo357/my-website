@@ -1,21 +1,29 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import Header from "@/components/Header";
+import SEO from "@/components/SEO";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { CircleAlert as AlertCircle, CircleCheck as CheckCircle2, Plus, X } from "lucide-react";
-import { services, getServiceByName, MINIMUM_BOOKING_AMOUNT, type Service } from "@/data/services";
+import { CircleAlert as AlertCircle, CircleCheck as CheckCircle2, X, Loader2 } from "lucide-react";
+import { fetchActiveServices, getServiceByName, groupServicesByCategory } from "@/lib/services";
+import { createBooking, MINIMUM_BOOKING_AMOUNT, calculateTravelFee, FREE_TRAVEL_RADIUS_KM, isValidBookingDate, isWithinBusinessHours, getBusinessHours } from "@/lib/bookings";
+import type { Service } from "@/lib/supabase";
 
 const Booking = () => {
   const [searchParams] = useSearchParams();
   const preselectedServiceName = searchParams.get("service") || "";
-  
+
+  const [services, setServices] = useState<Service[]>([]);
   const [selectedServices, setSelectedServices] = useState<Service[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+
   const [formData, setFormData] = useState({
     date: "",
     time: "",
@@ -23,26 +31,45 @@ const Booking = () => {
     email: "",
     phone: "",
     address: "",
+    distance: "",
     paymentMethod: "cash",
+    notes: "",
   });
 
-  // Pre-select service from URL if exists
   useEffect(() => {
-    if (preselectedServiceName) {
-      const service = getServiceByName(preselectedServiceName);
+    loadServices();
+  }, []);
+
+  useEffect(() => {
+    if (preselectedServiceName && services.length > 0) {
+      const service = services.find(s => s.name === preselectedServiceName);
       if (service && !selectedServices.find(s => s.id === service.id)) {
         setSelectedServices([service]);
       }
     }
-  }, [preselectedServiceName]);
+  }, [preselectedServiceName, services]);
+
+  const loadServices = async () => {
+    try {
+      const data = await fetchActiveServices();
+      setServices(data);
+    } catch (error) {
+      toast.error("Failed to load services");
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const totalAmount = selectedServices.reduce((sum, service) => sum + service.price, 0);
+  const distanceKm = parseFloat(formData.distance) || 0;
+  const travelFee = distanceKm > 0 ? calculateTravelFee(distanceKm) : 0;
   const meetsMinimum = totalAmount >= MINIMUM_BOOKING_AMOUNT;
   const amountNeeded = MINIMUM_BOOKING_AMOUNT - totalAmount;
 
   const toggleService = (service: Service) => {
     const isSelected = selectedServices.find(s => s.id === service.id);
-    
+
     if (isSelected) {
       setSelectedServices(selectedServices.filter(s => s.id !== service.id));
     } else {
@@ -54,71 +81,113 @@ const Booking = () => {
     setSelectedServices(selectedServices.filter(s => s.id !== serviceId));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (selectedServices.length === 0) {
       toast.error("Please select at least one service");
       return;
     }
 
     if (!meetsMinimum) {
-      toast.error(`Minimum booking amount is R${MINIMUM_BOOKING_AMOUNT}. Please add more services.`);
+      toast.error(`Minimum booking amount is R${(MINIMUM_BOOKING_AMOUNT / 100).toFixed(2)}. Please add more services.`);
       return;
     }
 
-    const bookingData = {
-      id: `bk_${Date.now()}`,
-      services: selectedServices.map(s => ({ name: s.name, price: s.price })),
-      totalAmount,
-      ...formData,
-      createdAt: new Date().toISOString(),
-    };
+    if (!isValidBookingDate(formData.date)) {
+      toast.error("Please select a future date");
+      return;
+    }
 
-    // Save to localStorage
-    const existingBookings = JSON.parse(
-      localStorage.getItem("sharmoria_bookings") || "[]"
-    );
-    existingBookings.push(bookingData);
-    localStorage.setItem(
-      "sharmoria_bookings",
-      JSON.stringify(existingBookings)
-    );
+    if (!isWithinBusinessHours(formData.date, formData.time)) {
+      const hours = getBusinessHours();
+      const bookingDate = new Date(formData.date);
+      const dayOfWeek = bookingDate.getDay();
 
-    toast.success(
-      "Booking received! We will contact you to confirm. Thank you!"
-    );
+      let hoursText = '';
+      if (dayOfWeek === 0) {
+        hoursText = `${hours.sunday.start} - ${hours.sunday.end}`;
+      } else if (dayOfWeek === 6) {
+        hoursText = `${hours.saturday.start} - ${hours.saturday.end}`;
+      } else {
+        hoursText = `${hours.weekday.start} - ${hours.weekday.end}`;
+      }
 
-    // Reset form
-    setSelectedServices([]);
-    setFormData({
-      date: "",
-      time: "",
-      name: "",
-      email: "",
-      phone: "",
-      address: "",
-      paymentMethod: "cash",
-    });
+      toast.error(`Please select a time within our business hours: ${hoursText}`);
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      const result = await createBooking({
+        customerName: formData.name,
+        customerEmail: formData.email,
+        customerPhone: formData.phone,
+        serviceAddress: formData.address,
+        bookingDate: formData.date,
+        bookingTime: formData.time,
+        services: selectedServices,
+        paymentMethod: formData.paymentMethod,
+        distanceKm: distanceKm || undefined,
+        notes: formData.notes,
+      });
+
+      if (result.success && result.booking) {
+        toast.success(
+          `Booking confirmed! Your booking number is ${result.booking.booking_number}. We will contact you within 24 hours.`
+        );
+
+        setSelectedServices([]);
+        setFormData({
+          date: "",
+          time: "",
+          name: "",
+          email: "",
+          phone: "",
+          address: "",
+          distance: "",
+          paymentMethod: "cash",
+          notes: "",
+        });
+      } else {
+        toast.error(result.error || "Failed to create booking");
+      }
+    } catch (error) {
+      toast.error("Failed to create booking. Please try again.");
+      console.error(error);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const groupedServices = {
-    package: services.filter(s => s.category === "package"),
-    waxing: services.filter(s => s.category === "waxing"),
-    massage: services.filter(s => s.category === "massage"),
-    facial: services.filter(s => s.category === "facial"),
-    "waxing-single": services.filter(s => s.category === "waxing-single"),
-    addon: services.filter(s => s.category === "addon"),
-  };
+  const groupedServices = groupServicesByCategory(services);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Header />
+        <main className="flex-1 flex items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col">
+      <SEO
+        title="Book Appointment - SHARMORIA Mobile Spa"
+        description="Book your mobile massage, waxing, or facial appointment online. Choose from our wide range of services and packages. Flexible scheduling, professional therapists, we come to you."
+        keywords="book massage online, mobile spa booking, massage appointment Johannesburg, waxing booking Pretoria, spa services booking, home massage reservation"
+      />
       <Header />
-      
+
       <main className="flex-1 py-20">
         <div className="container mx-auto px-4 max-w-6xl">
           <div className="text-center mb-12 space-y-4">
@@ -131,161 +200,111 @@ const Booking = () => {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Service Selection */}
             <div className="lg:col-span-2 space-y-6">
               <div className="bg-white rounded-lg shadow-medium p-6">
                 <h2 className="text-2xl font-bold font-playfair mb-4">
                   Select Services
                 </h2>
-                
-                {/* Minimum booking notice */}
+
                 <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 mb-6">
                   <div className="flex items-start gap-3">
                     <AlertCircle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
                     <div>
                       <p className="font-semibold text-foreground">
-                        Minimum Booking: R{MINIMUM_BOOKING_AMOUNT}
+                        Minimum Booking: R{(MINIMUM_BOOKING_AMOUNT / 100).toFixed(2)}
                       </p>
                       <p className="text-sm text-muted-foreground mt-1">
-                        For clients located more than 5km from the city center of Pretoria or Johannesburg,
-                        we require a minimum booking of R{MINIMUM_BOOKING_AMOUNT}. Feel free to combine multiple services to meet this amount.
+                        For clients located more than {FREE_TRAVEL_RADIUS_KM}km from the city center of Pretoria or Johannesburg,
+                        we require a minimum booking of R{(MINIMUM_BOOKING_AMOUNT / 100).toFixed(2)}. Feel free to combine multiple services to meet this amount.
                       </p>
                     </div>
                   </div>
                 </div>
 
-                {/* Package Bundles */}
-                <div className="mb-6">
-                  <h3 className="font-semibold text-lg mb-3 text-foreground">Package Bundles</h3>
-                  <div className="space-y-2">
-                    {groupedServices.package.map((service) => (
-                      <div
-                        key={service.id}
-                        className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted transition-colors cursor-pointer"
-                        onClick={() => toggleService(service)}
-                      >
-                        <Checkbox
-                          checked={!!selectedServices.find(s => s.id === service.id)}
-                          onCheckedChange={() => toggleService(service)}
+                {groupedServices.package && groupedServices.package.length > 0 && (
+                  <div className="mb-6">
+                    <h3 className="font-semibold text-lg mb-3 text-foreground">Package Bundles</h3>
+                    <div className="space-y-2">
+                      {groupedServices.package.map((service) => (
+                        <ServiceCheckbox
+                          key={service.id}
+                          service={service}
+                          isSelected={!!selectedServices.find(s => s.id === service.id)}
+                          onToggle={toggleService}
                         />
-                        <div className="flex-1">
-                          <p className="font-medium">{service.name}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {service.duration}
-                          </p>
-                        </div>
-                        <p className="font-bold text-primary">R{service.price}</p>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
-                {/* Massage Services */}
-                <div className="mb-6">
-                  <h3 className="font-semibold text-lg mb-3 text-foreground">Massage Services</h3>
-                  <div className="space-y-2">
-                    {groupedServices.massage.map((service) => (
-                      <div
-                        key={service.id}
-                        className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted transition-colors cursor-pointer"
-                        onClick={() => toggleService(service)}
-                      >
-                        <Checkbox
-                          checked={!!selectedServices.find(s => s.id === service.id)}
-                          onCheckedChange={() => toggleService(service)}
+                {groupedServices.massage && groupedServices.massage.length > 0 && (
+                  <div className="mb-6">
+                    <h3 className="font-semibold text-lg mb-3 text-foreground">Massage Services</h3>
+                    <div className="space-y-2">
+                      {groupedServices.massage.map((service) => (
+                        <ServiceCheckbox
+                          key={service.id}
+                          service={service}
+                          isSelected={!!selectedServices.find(s => s.id === service.id)}
+                          onToggle={toggleService}
                         />
-                        <div className="flex-1">
-                          <p className="font-medium">{service.name}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {service.duration}
-                          </p>
-                        </div>
-                        <p className="font-bold text-primary">R{service.price}</p>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
-                {/* Waxing Packages */}
-                <div className="mb-6">
-                  <h3 className="font-semibold text-lg mb-3 text-foreground">Waxing Packages</h3>
-                  <div className="space-y-2">
-                    {groupedServices.waxing.map((service) => (
-                      <div
-                        key={service.id}
-                        className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted transition-colors cursor-pointer"
-                        onClick={() => toggleService(service)}
-                      >
-                        <Checkbox
-                          checked={!!selectedServices.find(s => s.id === service.id)}
-                          onCheckedChange={() => toggleService(service)}
+                {groupedServices.waxing && groupedServices.waxing.length > 0 && (
+                  <div className="mb-6">
+                    <h3 className="font-semibold text-lg mb-3 text-foreground">Waxing Packages</h3>
+                    <div className="space-y-2">
+                      {groupedServices.waxing.map((service) => (
+                        <ServiceCheckbox
+                          key={service.id}
+                          service={service}
+                          isSelected={!!selectedServices.find(s => s.id === service.id)}
+                          onToggle={toggleService}
                         />
-                        <div className="flex-1">
-                          <p className="font-medium">{service.name}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {service.duration}
-                          </p>
-                        </div>
-                        <p className="font-bold text-primary">R{service.price}</p>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
-                {/* Individual Waxing */}
-                <div className="mb-6">
-                  <h3 className="font-semibold text-lg mb-3 text-foreground">Individual Waxing Services</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    {groupedServices["waxing-single"].map((service) => (
-                      <div
-                        key={service.id}
-                        className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted transition-colors cursor-pointer"
-                        onClick={() => toggleService(service)}
-                      >
-                        <Checkbox
-                          checked={!!selectedServices.find(s => s.id === service.id)}
-                          onCheckedChange={() => toggleService(service)}
+                {groupedServices['waxing-single'] && groupedServices['waxing-single'].length > 0 && (
+                  <div className="mb-6">
+                    <h3 className="font-semibold text-lg mb-3 text-foreground">Individual Waxing Services</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      {groupedServices['waxing-single'].map((service) => (
+                        <ServiceCheckbox
+                          key={service.id}
+                          service={service}
+                          isSelected={!!selectedServices.find(s => s.id === service.id)}
+                          onToggle={toggleService}
+                          compact
                         />
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm truncate">{service.name}</p>
-                        </div>
-                        <p className="font-bold text-primary text-sm">R{service.price}</p>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
-                {/* Facial & Add-ons */}
-                <div>
-                  <h3 className="font-semibold text-lg mb-3 text-foreground">Facial & Add-ons</h3>
-                  <div className="space-y-2">
-                    {[...groupedServices.facial, ...groupedServices.addon].map((service) => (
-                      <div
-                        key={service.id}
-                        className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted transition-colors cursor-pointer"
-                        onClick={() => toggleService(service)}
-                      >
-                        <Checkbox
-                          checked={!!selectedServices.find(s => s.id === service.id)}
-                          onCheckedChange={() => toggleService(service)}
+                {(groupedServices.facial || groupedServices.addon) && (
+                  <div>
+                    <h3 className="font-semibold text-lg mb-3 text-foreground">Facial & Add-ons</h3>
+                    <div className="space-y-2">
+                      {[...(groupedServices.facial || []), ...(groupedServices.addon || [])].map((service) => (
+                        <ServiceCheckbox
+                          key={service.id}
+                          service={service}
+                          isSelected={!!selectedServices.find(s => s.id === service.id)}
+                          onToggle={toggleService}
                         />
-                        <div className="flex-1">
-                          <p className="font-medium">{service.name}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {service.duration}
-                          </p>
-                        </div>
-                        <p className="font-bold text-primary">R{service.price}</p>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             </div>
 
-            {/* Booking Summary & Form */}
             <div className="space-y-6">
-              {/* Selected Services Summary */}
               <div className="bg-white rounded-lg shadow-medium p-6 lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
                 <h2 className="text-xl font-bold font-playfair mb-4">
                   Booking Summary
@@ -309,7 +328,7 @@ const Booking = () => {
                           </p>
                         </div>
                         <p className="font-bold text-primary text-sm whitespace-nowrap">
-                          R{service.price}
+                          R{(service.price / 100).toFixed(2)}
                         </p>
                         <button
                           onClick={() => removeService(service.id)}
@@ -323,10 +342,22 @@ const Booking = () => {
                 )}
 
                 <div className="border-t pt-4 space-y-3">
-                  <div className="flex justify-between items-center">
+                  <div className="flex justify-between items-center text-sm">
+                    <p>Subtotal:</p>
+                    <p className="font-semibold">R{(totalAmount / 100).toFixed(2)}</p>
+                  </div>
+
+                  {travelFee > 0 && (
+                    <div className="flex justify-between items-center text-sm">
+                      <p>Travel Fee ({distanceKm}km):</p>
+                      <p className="font-semibold">R{(travelFee / 100).toFixed(2)}</p>
+                    </div>
+                  )}
+
+                  <div className="flex justify-between items-center pt-2 border-t">
                     <p className="font-semibold">Total:</p>
                     <p className="text-2xl font-bold text-primary">
-                      R{totalAmount}
+                      R{((totalAmount + travelFee) / 100).toFixed(2)}
                     </p>
                   </div>
 
@@ -336,10 +367,10 @@ const Booking = () => {
                         <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
                         <div className="text-sm">
                           <p className="font-semibold text-amber-900">
-                            Add R{amountNeeded} more
+                            Add R{(amountNeeded / 100).toFixed(2)} more
                           </p>
                           <p className="text-amber-700">
-                            to meet the R{MINIMUM_BOOKING_AMOUNT} minimum
+                            to meet the R{(MINIMUM_BOOKING_AMOUNT / 100).toFixed(2)} minimum
                           </p>
                         </div>
                       </div>
@@ -359,7 +390,6 @@ const Booking = () => {
                 </div>
               </div>
 
-              {/* Booking Form */}
               {selectedServices.length > 0 && (
                 <form
                   onSubmit={handleSubmit}
@@ -388,6 +418,9 @@ const Booking = () => {
                       onChange={(e) => handleChange("time", e.target.value)}
                       required
                     />
+                    <p className="text-xs text-muted-foreground">
+                      Mon-Fri: 8AM-5PM | Sat: 8AM-3PM | Sun: 8AM-1PM
+                    </p>
                   </div>
 
                   <div className="space-y-2">
@@ -438,6 +471,33 @@ const Booking = () => {
                     />
                   </div>
 
+                  <div className="space-y-2">
+                    <Label htmlFor="distance">Distance from City Center (km)</Label>
+                    <Input
+                      type="number"
+                      id="distance"
+                      placeholder="e.g. 8"
+                      min="0"
+                      step="0.1"
+                      value={formData.distance}
+                      onChange={(e) => handleChange("distance", e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      First {FREE_TRAVEL_RADIUS_KM}km free. R{(calculateTravelFee(FREE_TRAVEL_RADIUS_KM + 1) / 100).toFixed(2)} per km after.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="notes">Additional Notes (Optional)</Label>
+                    <Textarea
+                      id="notes"
+                      placeholder="Any special requests or requirements..."
+                      rows={3}
+                      value={formData.notes}
+                      onChange={(e) => handleChange("notes", e.target.value)}
+                    />
+                  </div>
+
                   <div className="space-y-3">
                     <Label>Payment Method *</Label>
                     <RadioGroup
@@ -463,9 +523,18 @@ const Booking = () => {
                   <Button
                     type="submit"
                     className="w-full gradient-hero text-white hover:opacity-90 transition-opacity"
-                    disabled={!meetsMinimum}
+                    disabled={!meetsMinimum || submitting}
                   >
-                    {meetsMinimum ? "Confirm Booking" : `Add R${amountNeeded} More to Book`}
+                    {submitting ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Processing...
+                      </>
+                    ) : meetsMinimum ? (
+                      "Confirm Booking"
+                    ) : (
+                      `Add R${(amountNeeded / 100).toFixed(2)} More to Book`
+                    )}
                   </Button>
 
                   <p className="text-xs text-muted-foreground text-center">
@@ -483,5 +552,36 @@ const Booking = () => {
   );
 };
 
-export default Booking;
+interface ServiceCheckboxProps {
+  service: Service;
+  isSelected: boolean;
+  onToggle: (service: Service) => void;
+  compact?: boolean;
+}
 
+const ServiceCheckbox = ({ service, isSelected, onToggle, compact }: ServiceCheckboxProps) => {
+  return (
+    <div
+      className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted transition-colors cursor-pointer"
+      onClick={() => onToggle(service)}
+    >
+      <Checkbox
+        checked={isSelected}
+        onCheckedChange={() => onToggle(service)}
+      />
+      <div className="flex-1 min-w-0">
+        <p className={`font-medium ${compact ? 'text-sm truncate' : ''}`}>{service.name}</p>
+        {!compact && (
+          <p className="text-sm text-muted-foreground">
+            {service.duration}
+          </p>
+        )}
+      </div>
+      <p className={`font-bold text-primary ${compact ? 'text-sm' : ''}`}>
+        R{(service.price / 100).toFixed(2)}
+      </p>
+    </div>
+  );
+};
+
+export default Booking;

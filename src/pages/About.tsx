@@ -1,4 +1,5 @@
 import Header from "@/components/Header";
+import SEO from "@/components/SEO";
 import Footer from "@/components/Footer";
 import certifiedImage from "@/assets/certified-therapist.jpg";
 import luxuryImage from "@/assets/luxury-experience.jpg";
@@ -6,6 +7,11 @@ import luxuryImage from "@/assets/luxury-experience.jpg";
 const About = () => {
   return (
     <div className="min-h-screen flex flex-col">
+      <SEO
+        title="About Us - SHARMORIA Mobile Spa"
+        description="Learn about SHARMORIA's commitment to providing luxurious mobile massage and spa services. Meet our certified therapists and discover our promise of professionalism, hygiene, and exceptional care."
+        keywords="about SHARMORIA, mobile spa team, certified massage therapists Johannesburg, professional waxing Pretoria, mobile spa company"
+      />
       <Header />
       
       <main className="flex-1">

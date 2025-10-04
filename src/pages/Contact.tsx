@@ -1,14 +1,18 @@
 import { useState } from "react";
 import Header from "@/components/Header";
+import SEO from "@/components/SEO";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { Loader2 } from "lucide-react";
+import { createContact } from "@/lib/contacts";
 import { Phone, Mail, MapPin, MessageCircle } from "lucide-react";
 
 const Contact = () => {
+  const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -16,33 +20,32 @@ const Contact = () => {
     message: "",
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitting(true);
 
-    const contactData = {
-      ...formData,
-      createdAt: new Date().toISOString(),
-    };
+    try {
+      await createContact({
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        message: formData.message,
+      });
 
-    // Save to localStorage
-    const existingContacts = JSON.parse(
-      localStorage.getItem("sharmoria_contacts") || "[]"
-    );
-    existingContacts.push(contactData);
-    localStorage.setItem(
-      "sharmoria_contacts",
-      JSON.stringify(existingContacts)
-    );
+      toast.success("Message sent successfully! We will reply within 24 hours.");
 
-    toast.success("Message saved. We will reply within 24 hours.");
-
-    // Reset form
-    setFormData({
-      name: "",
-      email: "",
-      phone: "",
-      message: "",
-    });
+      setFormData({
+        name: "",
+        email: "",
+        phone: "",
+        message: "",
+      });
+    } catch (error) {
+      toast.error("Failed to send message. Please try again.");
+      console.error(error);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleChange = (
@@ -54,6 +57,11 @@ const Contact = () => {
 
   return (
     <div className="min-h-screen flex flex-col">
+      <SEO
+        title="Contact Us - SHARMORIA Mobile Spa"
+        description="Get in touch with SHARMORIA for bookings, inquiries, or group events. We serve Johannesburg and Pretoria with mobile massage, waxing, and facial services. Call, WhatsApp, or send us a message."
+        keywords="contact SHARMORIA, massage booking contact, mobile spa inquiries, group bookings Johannesburg, corporate massage events Pretoria"
+      />
       <Header />
       
       <main className="flex-1 py-20">
@@ -121,8 +129,16 @@ const Contact = () => {
                 <Button
                   type="submit"
                   className="w-full gradient-hero text-white hover:opacity-90 transition-opacity"
+                  disabled={submitting}
                 >
-                  Send Message
+                  {submitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    "Send Message"
+                  )}
                 </Button>
               </form>
             </div>

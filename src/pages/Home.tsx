@@ -1,9 +1,14 @@
 import { Link } from "react-router-dom";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { fetchApprovedTestimonials } from "@/lib/testimonials";
+import type { Testimonial } from "@/lib/supabase";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import ServiceCard from "@/components/ServiceCard";
 import FeatureCard from "@/components/FeatureCard";
+import FAQ from "@/components/FAQ";
+import SEO from "@/components/SEO";
 import heroImage from "@/assets/hero-massage.jpg";
 import fullBodyImage from "@/assets/full-body-massage.jpg";
 import deepTissueImage from "@/assets/deep-tissue.jpg";
@@ -13,6 +18,20 @@ import certifiedImage from "@/assets/certified-therapist.jpg";
 import luxuryImage from "@/assets/luxury-experience.jpg";
 
 const Home = () => {
+  const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
+
+  useEffect(() => {
+    loadTestimonials();
+  }, []);
+
+  const loadTestimonials = async () => {
+    try {
+      const data = await fetchApprovedTestimonials();
+      setTestimonials(data.slice(0, 4));
+    } catch (error) {
+      console.error('Failed to load testimonials:', error);
+    }
+  };
   const featuredServices = [
     {
       title: "Quick Refresh",
@@ -66,6 +85,7 @@ const Home = () => {
 
   return (
     <div className="min-h-screen flex flex-col">
+      <SEO />
       <Header />
       
       <main className="flex-1">
@@ -166,24 +186,44 @@ const Home = () => {
             </h2>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-              <div className="bg-white p-8 rounded-lg shadow-soft animate-fade-in-up">
-                <p className="text-foreground leading-relaxed mb-4">
-                  "Amazing! Therapist arrived on time and the massage was
-                  heavenly — my back feels brand new."
-                </p>
-                <p className="text-primary font-semibold">— Thando</p>
-              </div>
-              
-              <div className="bg-white p-8 rounded-lg shadow-soft animate-fade-in-up">
-                <p className="text-foreground leading-relaxed mb-4">
-                  "Luxurious experience, and booking was so easy. Will book
-                  again."
-                </p>
-                <p className="text-primary font-semibold">— Priya</p>
-              </div>
+              {testimonials.length > 0 ? (
+                testimonials.map((testimonial) => (
+                  <div key={testimonial.id} className="bg-white p-8 rounded-lg shadow-soft animate-fade-in-up">
+                    <div className="flex gap-1 mb-3">
+                      {Array.from({ length: testimonial.rating }).map((_, i) => (
+                        <span key={i} className="text-amber-400">★</span>
+                      ))}
+                    </div>
+                    <p className="text-foreground leading-relaxed mb-4">
+                      "{testimonial.content}"
+                    </p>
+                    <p className="text-primary font-semibold">— {testimonial.customer_name}</p>
+                  </div>
+                ))
+              ) : (
+                <>
+                  <div className="bg-white p-8 rounded-lg shadow-soft animate-fade-in-up">
+                    <p className="text-foreground leading-relaxed mb-4">
+                      "Amazing! Therapist arrived on time and the massage was
+                      heavenly — my back feels brand new."
+                    </p>
+                    <p className="text-primary font-semibold">— Thando</p>
+                  </div>
+                  <div className="bg-white p-8 rounded-lg shadow-soft animate-fade-in-up">
+                    <p className="text-foreground leading-relaxed mb-4">
+                      "Luxurious experience, and booking was so easy. Will book
+                      again."
+                    </p>
+                    <p className="text-primary font-semibold">— Priya</p>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </section>
+
+        {/* FAQ Section */}
+        <FAQ />
 
         {/* CTA Section */}
         <section className="py-20 gradient-hero text-white">

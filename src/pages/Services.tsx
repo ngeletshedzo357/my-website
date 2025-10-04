@@ -1,4 +1,5 @@
 import Header from "@/components/Header";
+import SEO from "@/components/SEO";
 import Footer from "@/components/Footer";
 import ServiceCard from "@/components/ServiceCard";
 import fullBodyImage from "@/assets/full-body-massage.jpg";
@@ -256,6 +257,11 @@ const Services = () => {
 
   return (
     <div className="min-h-screen flex flex-col">
+      <SEO
+        title="Services & Pricing - SHARMORIA Mobile Spa"
+        description="Explore our full menu of mobile massage, waxing, and facial services. From relaxation massages to deep tissue therapy, Brazilian waxing to full spa packages. View our complete pricing and book online."
+        keywords="massage prices Johannesburg, mobile spa pricing, waxing services Pretoria, massage packages, deep tissue massage cost, Brazilian wax price, couples massage Johannesburg, spa services at home"
+      />
       <Header />
       
       <main className="flex-1">
