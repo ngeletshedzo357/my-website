@@ -42,7 +42,7 @@ const AdminLogin = () => {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
-            <img src={logo} alt="SHARMORIA" className="h-16 w-auto" />
+            <img src={logo} alt="SHARMORIA" className="h-20 w-auto mix-blend-multiply dark:mix-blend-screen" />
           </div>
           <CardTitle className="text-2xl font-playfair">Admin Login</CardTitle>
           <CardDescription>

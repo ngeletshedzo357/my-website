@@ -180,7 +180,7 @@ const AdminDashboard = () => {
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <img src={logo} alt="SHARMORIA" className="h-12 w-auto" />
+              <img src={logo} alt="SHARMORIA" className="h-16 w-auto mix-blend-multiply dark:mix-blend-screen" />
               <div>
                 <h1 className="text-xl font-bold font-playfair">Admin Dashboard</h1>
                 <p className="text-sm text-muted-foreground">{user?.email}</p>
