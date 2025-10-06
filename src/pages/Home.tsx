@@ -1,8 +1,7 @@
 import { Link } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { fetchApprovedTestimonials } from "@/lib/testimonials";
-import type { Testimonial } from "@/lib/supabase";
+import { fetchApprovedTestimonials, type Testimonial } from "@/lib/testimonials";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import ServiceCard from "@/components/ServiceCard";

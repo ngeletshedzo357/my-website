@@ -1,18 +1,14 @@
-import { supabase, type Testimonial } from './supabase';
+export interface Testimonial {
+  id: string;
+  customer_name: string;
+  content: string;
+  rating: number;
+  is_approved: boolean;
+  created_at: string;
+}
 
 export const fetchApprovedTestimonials = async (): Promise<Testimonial[]> => {
-  const { data, error } = await supabase
-    .from('testimonials')
-    .select('*')
-    .eq('is_approved', true)
-    .order('created_at', { ascending: false });
-
-  if (error) {
-    console.error('Error fetching testimonials:', error);
-    throw error;
-  }
-
-  return data || [];
+  return Promise.resolve([]);
 };
 
 interface CreateTestimonialData {
@@ -22,21 +18,16 @@ interface CreateTestimonialData {
 }
 
 export const submitTestimonial = async (data: CreateTestimonialData) => {
-  const { data: testimonial, error } = await supabase
-    .from('testimonials')
-    .insert({
-      customer_name: data.customerName,
-      content: data.content,
-      rating: data.rating,
-      is_approved: false,
-    })
-    .select()
-    .single();
+  const testimonial = {
+    id: Date.now().toString(),
+    customer_name: data.customerName,
+    content: data.content,
+    rating: data.rating,
+    is_approved: false,
+    created_at: new Date().toISOString(),
+  };
 
-  if (error) {
-    console.error('Error submitting testimonial:', error);
-    throw error;
-  }
+  console.log('Testimonial submitted:', testimonial);
 
   return testimonial;
 };

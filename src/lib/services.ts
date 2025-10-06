@@ -1,53 +1,22 @@
-import { supabase, type Service } from './supabase';
+import { services } from '@/data/services';
+import type { Service } from '@/data/services';
+
+export type { Service };
 
 export const fetchActiveServices = async (): Promise<Service[]> => {
-  const { data, error } = await supabase
-    .from('services')
-    .select('*')
-    .eq('is_active', true)
-    .order('name');
-
-  if (error) {
-    console.error('Error fetching services:', error);
-    throw error;
-  }
-
-  return data || [];
+  return Promise.resolve(services);
 };
 
-export const getServiceById = async (id: string): Promise<Service | null> => {
-  const { data, error } = await supabase
-    .from('services')
-    .select('*')
-    .eq('id', id)
-    .maybeSingle();
-
-  if (error) {
-    console.error('Error fetching service:', error);
-    throw error;
-  }
-
-  return data;
+export const getServiceById = (id: string): Service | undefined => {
+  return services.find(s => s.id === id);
 };
 
-export const getServiceByName = async (name: string): Promise<Service | null> => {
-  const { data, error } = await supabase
-    .from('services')
-    .select('*')
-    .eq('name', name)
-    .eq('is_active', true)
-    .maybeSingle();
-
-  if (error) {
-    console.error('Error fetching service by name:', error);
-    throw error;
-  }
-
-  return data;
+export const getServiceByName = (name: string): Service | undefined => {
+  return services.find(s => s.name === name);
 };
 
-export const groupServicesByCategory = (services: Service[]) => {
-  return services.reduce((acc, service) => {
+export const groupServicesByCategory = (serviceList: Service[]) => {
+  return serviceList.reduce((acc, service) => {
     if (!acc[service.category]) {
       acc[service.category] = [];
     }

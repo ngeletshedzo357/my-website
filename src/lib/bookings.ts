@@ -1,4 +1,4 @@
-import { supabase, type Booking, type Service } from './supabase';
+import type { Service } from '@/data/services';
 
 export const MINIMUM_BOOKING_AMOUNT = 50000;
 export const TRAVEL_FEE_PER_KM = 1500;
@@ -19,7 +19,19 @@ interface CreateBookingData {
 
 interface CreateBookingResult {
   success: boolean;
-  booking?: Booking;
+  booking?: {
+    booking_number: string;
+    customer_name: string;
+    customer_email: string;
+    customer_phone: string;
+    service_address: string;
+    booking_date: string;
+    booking_time: string;
+    total_amount: number;
+    travel_fee: number;
+    payment_method: string;
+    notes: string;
+  };
   error?: string;
 }
 
@@ -43,7 +55,7 @@ export const createBooking = async (data: CreateBookingData): Promise<CreateBook
     const travelFee = data.distanceKm ? calculateTravelFee(data.distanceKm) : 0;
     const bookingNumber = generateBookingNumber();
 
-    const bookingData = {
+    const booking = {
       booking_number: bookingNumber,
       customer_name: data.customerName,
       customer_email: data.customerEmail,
@@ -54,63 +66,10 @@ export const createBooking = async (data: CreateBookingData): Promise<CreateBook
       total_amount: totalAmount,
       travel_fee: travelFee,
       payment_method: data.paymentMethod,
-      status: 'pending',
-      distance_km: data.distanceKm,
       notes: data.notes || '',
     };
 
-    const { data: booking, error: bookingError } = await supabase
-      .from('bookings')
-      .insert(bookingData)
-      .select()
-      .single();
-
-    if (bookingError) {
-      console.error('Error creating booking:', bookingError);
-      return {
-        success: false,
-        error: bookingError.message,
-      };
-    }
-
-    const bookingServices = data.services.map((service) => ({
-      booking_id: booking.id,
-      service_id: service.id,
-      price_at_booking: service.price,
-    }));
-
-    const { error: servicesError } = await supabase
-      .from('booking_services')
-      .insert(bookingServices);
-
-    if (servicesError) {
-      console.error('Error creating booking services:', servicesError);
-      await supabase.from('bookings').delete().eq('id', booking.id);
-      return {
-        success: false,
-        error: servicesError.message,
-      };
-    }
-
-    try {
-      await sendBookingConfirmation({
-        to: data.customerEmail,
-        bookingNumber: booking.booking_number,
-        customerName: data.customerName,
-        services: data.services.map(s => ({
-          name: s.name,
-          price: s.price,
-        })),
-        totalAmount,
-        travelFee,
-        bookingDate: data.bookingDate,
-        bookingTime: data.bookingTime,
-        serviceAddress: data.serviceAddress,
-        paymentMethod: data.paymentMethod,
-      });
-    } catch (emailError) {
-      console.error('Email notification failed:', emailError);
-    }
+    console.log('Booking created:', booking);
 
     return {
       success: true,
@@ -123,40 +82,6 @@ export const createBooking = async (data: CreateBookingData): Promise<CreateBook
       error: error instanceof Error ? error.message : 'Unknown error',
     };
   }
-};
-
-const sendBookingConfirmation = async (emailData: {
-  to: string;
-  bookingNumber: string;
-  customerName: string;
-  services: Array<{ name: string; price: number }>;
-  totalAmount: number;
-  travelFee: number;
-  bookingDate: string;
-  bookingTime: string;
-  serviceAddress: string;
-  paymentMethod: string;
-}) => {
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-  const response = await fetch(
-    `${supabaseUrl}/functions/v1/send-booking-confirmation`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${supabaseAnonKey}`,
-      },
-      body: JSON.stringify(emailData),
-    }
-  );
-
-  if (!response.ok) {
-    throw new Error('Failed to send booking confirmation email');
-  }
-
-  return response.json();
 };
 
 export const isValidBookingDate = (date: string): boolean => {

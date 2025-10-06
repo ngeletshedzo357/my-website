@@ -1,5 +1,3 @@
-import { supabase, type Contact } from './supabase';
-
 interface CreateContactData {
   name: string;
   email: string;
@@ -8,22 +6,15 @@ interface CreateContactData {
 }
 
 export const createContact = async (data: CreateContactData) => {
-  const { data: contact, error } = await supabase
-    .from('contacts')
-    .insert({
-      name: data.name,
-      email: data.email,
-      phone: data.phone || '',
-      message: data.message,
-      status: 'new',
-    })
-    .select()
-    .single();
+  const contact = {
+    name: data.name,
+    email: data.email,
+    phone: data.phone || '',
+    message: data.message,
+    created_at: new Date().toISOString(),
+  };
 
-  if (error) {
-    console.error('Error creating contact:', error);
-    throw error;
-  }
+  console.log('Contact message received:', contact);
 
   return contact;
 };
